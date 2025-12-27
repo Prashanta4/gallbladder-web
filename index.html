@@ -9,17 +9,20 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
+        <div class="container d-flex justify-content-between align-items-center">
             <a class="navbar-brand" href="#">
                 <i class="fas fa-heartbeat me-2"></i>
                 Gallbladder AI Diagnostics
             </a>
+            
+            <div id="statusIndicator" class="d-flex align-items-center status-offline">
+                <div class="status-dot me-2"></div>
+                <span class="status-text small fw-bold text-white">Connecting...</span>
+            </div>
         </div>
     </nav>
 
-    <!-- Hero Section -->
     <div class="hero-section">
         <div class="container">
             <div class="row align-items-center">
@@ -36,7 +39,6 @@
         </div>
     </div>
 
-    <!-- Main Content -->
     <div class="container py-5">
         <div class="row justify-content-center">
             <div class="col-lg-8">
@@ -62,29 +64,34 @@
                             </div>
                         </div>
 
-                        <!-- Preview Section -->
                         <div id="preview" class="preview-section"></div>
 
-                        <!-- Action Buttons -->
                         <div class="text-center mt-4 d-flex justify-content-center gap-3 flex-wrap">
                             <button id="predictBtn" onclick="predictImage('predict')" class="btn btn-success btn-lg" disabled>
                                 <i class="fas fa-brain me-2"></i>
                                 <span class="btn-text">Analyze Image</span>
-                                <div class="spinner-border spinner-border-sm ms-2 d-none" role="status"></div>
                             </button>
 
                             <button id="xaiBtn" onclick="predictImage('explain')" class="btn btn-warning btn-lg" disabled>
                                 <i class="fas fa-lightbulb me-2"></i>
                                 <span class="btn-text">Analyze with XAI</span>
-                                <div class="spinner-border spinner-border-sm ms-2 d-none" role="status"></div>
                             </button>
                         </div>
 
-                        <!-- Results Section -->
+                        <div id="loadingProgress" class="mt-4 d-none">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="fw-bold text-muted small" id="progressText">Analyzing...</span>
+                                <span class="fw-bold text-muted small" id="progressPercent">0%</span>
+                            </div>
+                            <div class="progress" style="height: 10px;">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted d-block mt-2 text-center fst-italic">This might take up to 40 seconds for XAI analysis...</small>
+                        </div>
+
                         <div id="result" class="result-section"></div>
 
-                        <!-- Error Section -->
-                        <div id="error" class="alert alert-danger d-none" role="alert">
+                        <div id="error" class="alert alert-danger d-none mt-3" role="alert">
                             <i class="fas fa-exclamation-triangle me-2"></i>
                             <span id="errorMessage"></span>
                         </div>
@@ -94,7 +101,6 @@
         </div>
     </div>
 
-    <!-- Footer -->
     <footer class="footer">
         <div class="container">
             <div class="row">
