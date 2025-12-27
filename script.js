@@ -3,6 +3,12 @@
 // ===========================
 let selectedFile = null;
 let isProcessing = false;
+let progressInterval = null; // To store the timer ID
+
+// ===========================
+// Configuration
+// ===========================
+const BASE_URL = "https://prasanta4-my-model-deployment.hf.space"; 
 
 // ===========================
 // DOM Elements
@@ -16,16 +22,27 @@ const errorMessage = document.getElementById('errorMessage');
 const predictBtn = document.getElementById('predictBtn');
 const xaiBtn = document.getElementById('xaiBtn');
 
+// New Elements
+const statusIndicator = document.getElementById('statusIndicator');
+const statusDot = statusIndicator.querySelector('.status-dot');
+const statusText = statusIndicator.querySelector('.status-text');
+const loadingProgress = document.getElementById('loadingProgress');
+const progressBar = document.getElementById('progressBar');
+const progressText = document.getElementById('progressText');
+const progressPercent = document.getElementById('progressPercent');
+
 // ===========================
 // Initialization
 // ===========================
-document.addEventListener('DOMContentLoaded', initializeEventListeners);
+document.addEventListener('DOMContentLoaded', () => {
+    initializeEventListeners();
+    checkBackendStatus(); // Check immediately on load
+    setInterval(checkBackendStatus, 10000); // Poll every 10 seconds
+});
 
 function initializeEventListeners() {
-    // Handle manual selection
     imageInput.addEventListener('change', handleFileSelect);
 
-    // Handle drag & drop
     uploadArea.addEventListener('dragover', e => {
         e.preventDefault();
         uploadArea.classList.add('dragover');
@@ -38,9 +55,42 @@ function initializeEventListeners() {
 
     uploadArea.addEventListener('drop', handleDrop);
 
-    // Prevent the browser from opening dropped files
     document.addEventListener('dragover', e => e.preventDefault());
     document.addEventListener('drop', e => e.preventDefault());
+}
+
+// ===========================
+// Backend Status Check
+// ===========================
+async function checkBackendStatus() {
+    try {
+        // Use a short timeout so we don't hang if it's down
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(`${BASE_URL}/health`, { 
+            signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+            updateStatusUI(true);
+        } else {
+            updateStatusUI(false);
+        }
+    } catch (error) {
+        updateStatusUI(false);
+    }
+}
+
+function updateStatusUI(isOnline) {
+    if (isOnline) {
+        statusIndicator.className = "d-flex align-items-center status-online";
+        statusText.textContent = "System Online";
+    } else {
+        statusIndicator.className = "d-flex align-items-center status-offline";
+        statusText.textContent = "System Offline";
+    }
 }
 
 // ===========================
@@ -51,7 +101,6 @@ function handleFileSelect(e) {
     if (file) {
         validateAndProcessFile(file);
     }
-    // ✅ Reset file input so selecting the same file again triggers 'change'
     e.target.value = "";
 }
 
@@ -104,7 +153,9 @@ function removeImage() {
     disableButtons();
     hideResult();
     hideError();
-    imageInput.value = ""; // ✅ Clear file input completely
+    // Hide progress bar if visible
+    loadingProgress.classList.add('d-none');
+    clearInterval(progressInterval);
 }
 
 // ===========================
@@ -130,13 +181,15 @@ async function predictImage(mode) {
     hideError();
     hideResult();
     isProcessing = true;
-    setLoadingState(true, mode);
+    disableButtons(); // Disable immediately
+
+    // Start Progress Bar Simulation
+    startProgressSimulation(mode);
 
     try {
         const endpoint = mode === 'explain'
-            ? 'https://prasanta4-my-model-deployment.hf.space/explain'
-            //: 'https://prasanta4-test-docker.hf.space/predict';
-            : 'https://prasanta4-my-model-deployment.hf.space/predict';
+            ? `${BASE_URL}/explain`
+            : `${BASE_URL}/predict`;
 
         const formData = new FormData();
         formData.append('file', selectedFile);
@@ -149,15 +202,71 @@ async function predictImage(mode) {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
-        displayResults(data, mode);
+        
+        // Complete the progress bar instantly upon success
+        finishProgress();
+        
+        // Short delay to let the bar hit 100% visually before showing results
+        setTimeout(() => {
+            displayResults(data, mode);
+        }, 500);
+
     } catch (err) {
         console.error(err);
+        loadingProgress.classList.add('d-none'); // Hide bar on error
         showError('Failed to analyze. Please try again.');
     } finally {
         isProcessing = false;
-        setLoadingState(false, mode);
+        enableButtons();
     }
 }
+
+// ===========================
+// Progress Bar Logic
+// ===========================
+function startProgressSimulation(mode) {
+    loadingProgress.classList.remove('d-none');
+    progressBar.style.width = '0%';
+    progressPercent.textContent = '0%';
+    progressText.textContent = mode === 'explain' ? 'Generating Explanations...' : 'Analyzing Image...';
+    
+    // Config: XAI takes longer (~40s), Predict is fast (~2s)
+    const duration = mode === 'explain' ? 35000 : 2000; 
+    const updateInterval = 100; // Update every 100ms
+    const totalSteps = duration / updateInterval;
+    let currentStep = 0;
+
+    clearInterval(progressInterval);
+    progressInterval = setInterval(() => {
+        currentStep++;
+        
+        // Calculate percentage (Logarithmic slowdown effectively)
+        // It goes fast at first, then slows down as it approaches 90%
+        let progress = Math.min(90, (currentStep / totalSteps) * 100); 
+        
+        progressBar.style.width = `${progress}%`;
+        progressPercent.textContent = `${Math.round(progress)}%`;
+
+        if (progress >= 90) {
+            clearInterval(progressInterval); // Hold at 90% until actual response
+        }
+    }, updateInterval);
+}
+
+function finishProgress() {
+    clearInterval(progressInterval);
+    progressBar.style.width = '100%';
+    progressPercent.textContent = '100%';
+    progressBar.classList.remove('progress-bar-animated'); // Stop animation
+    
+    // Hide after a brief moment
+    setTimeout(() => {
+        loadingProgress.classList.add('d-none');
+        progressBar.style.width = '0%'; // Reset
+        progressBar.classList.add('progress-bar-animated'); // Reset animation
+    }, 1000);
+}
+
 
 // ===========================
 // Display Results
@@ -215,24 +324,6 @@ function displayResults(data, mode) {
     result.style.display = 'block';
 }
 
-// ===========================
-// Loading & Error Handling
-// ===========================
-function setLoadingState(loading, mode) {
-    const btn = mode === 'explain' ? xaiBtn : predictBtn;
-    const text = btn.querySelector('.btn-text');
-    const spinner = btn.querySelector('.spinner-border');
-    if (loading) {
-        text.textContent = 'Analyzing...';
-        spinner.classList.remove('d-none');
-        disableButtons();
-    } else {
-        text.textContent = mode === 'explain' ? 'Analyze with XAI' : 'Analyze Image';
-        spinner.classList.add('d-none');
-        enableButtons();
-    }
-}
-
 function showError(msg) {
     errorMessage.textContent = msg;
     error.classList.remove('d-none');
@@ -245,5 +336,3 @@ function hideError() {
 function hideResult() {
     result.style.display = 'none';
 }
-
-
